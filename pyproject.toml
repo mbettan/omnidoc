@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnidoc-llm"
+version = "1.1.0"
+description = "Transform any ZIP archive into a single, structured, LLM-ready document."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Omnidoc Maintainers" }]
+keywords = ["llm", "zip", "pdf", "ocr", "markdown", "extraction", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pdfplumber>=0.9",
+    "pypdf>=4.0",
+    "openpyxl>=3.1",
+    "python-docx>=1.1",
+    "python-pptx>=0.6",
+    "pillow>=10.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "pytesseract>=0.3",
+    "pdf2image>=1.16",
+]
+pdf = [
+    "reportlab>=4.0",
+]
+ai = [
+    "google-genai>=0.1",
+]
+all = [
+    "pytesseract>=0.3",
+    "pdf2image>=1.16",
+    "reportlab>=4.0",
+    "google-genai>=0.1",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mbettan/omnidoc"
+Issues = "https://github.com/mbettan/omnidoc/issues"
+
+[project.scripts]
+omnidoc = "zip_to_llm:main_cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["zip_to_llm"]

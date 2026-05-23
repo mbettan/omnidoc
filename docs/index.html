@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omnidoc — ZIP Ingestion for LLMs</title>
+  <meta name="description" content="Transform any fragmented ZIP archive into a single structured, formatted, LLM-ready Markdown document. Built offline first.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ═══════════════════════════════════════
+       DESIGN TOKENS (Glassmorphic Premium Dark)
+     ═══════════════════════════════════════ */
+    :root {
+      --bg-base:        #020408;
+      --bg-surface:     #090c13;
+      --bg-elevated:    #0f1522;
+      --bg-overlay:     rgba(15, 21, 34, 0.75);
+
+      --cyan-400:       #22d3ee;
+      --cyan-500:       #06b6d4;
+      --blue-400:       #60a5fa;
+      --blue-500:       #3b82f6;
+      --indigo-500:     #6366f1;
+      --violet-500:     #8b5cf6;
+      --emerald-400:    #34d399;
+      --emerald-500:    #10b981;
+      --amber-400:      #fbbf24;
+      --rose-500:       #f43f5e;
+
+      --primary:        var(--cyan-500);
+      --primary-glow:   rgba(6, 182, 212, 0.35);
+      --secondary:      var(--blue-500);
+      --accent:         var(--emerald-500);
+
+      --text-100:       #f9fafb;
+      --text-200:       #e5e7eb;
+      --text-400:       #9ca3af;
+      --text-600:       #4b5563;
+
+      --border-subtle:  rgba(255,255,255,0.05);
+      --border-medium:  rgba(255,255,255,0.09);
+      --border-strong:  rgba(255,255,255,0.15);
+
+      --radius-sm:      6px;
+      --radius-md:      12px;
+      --radius-lg:      20px;
+      --radius-xl:      28px;
+      --radius-pill:    9999px;
+
+      --shadow-sm:  0 2px 8px rgba(0,0,0,0.5);
+      --shadow-md:  0 8px 32px rgba(0,0,0,0.6);
+      --shadow-lg:  0 24px 64px rgba(0,0,0,0.7);
+      --shadow-glow: 0 0 60px rgba(6,182,212,0.12);
+
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ═══════════════════════════════════════
+       RESET & BASE
+     ═══════════════════════════════════════ */
+    *, *::before, *::after {
+      margin: 0; padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-100);
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    img { display: block; max-width: 100%; }
+    a { color: inherit; }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ═══════════════════════════════════════
+       GRADIENT UTILITIES
+     ═══════════════════════════════════════ */
+    .gradient-text {
+      background: linear-gradient(135deg, var(--cyan-400) 0%, var(--blue-500) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .gradient-text-purple {
+      background: linear-gradient(135deg, var(--blue-400) 0%, var(--violet-500) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ═══════════════════════════════════════
+       ANIMATED CANVAS BACKGROUND
+     ═══════════════════════════════════════ */
+    .bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(110px);
+      opacity: 0.16;
+      animation: orb-drift 22s ease-in-out infinite alternate;
+    }
+    .orb-1 {
+      width: 650px; height: 650px;
+      background: radial-gradient(circle, var(--cyan-500), transparent 70%);
+      top: -15%; left: -8%;
+      animation-duration: 24s;
+    }
+    .orb-2 {
+      width: 550px; height: 550px;
+      background: radial-gradient(circle, var(--blue-500), transparent 70%);
+      bottom: -12%; right: -4%;
+      animation-duration: 19s;
+      animation-delay: -6s;
+    }
+    .orb-3 {
+      width: 380px; height: 380px;
+      background: radial-gradient(circle, var(--violet-500), transparent 70%);
+      top: 45%; left: 45%;
+      transform: translate(-50%, -50%);
+      animation-duration: 28s;
+      animation-delay: -3s;
+      opacity: 0.08;
+    }
+
+    @keyframes orb-drift {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(50px, 40px) scale(1.06); }
+    }
+
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent);
+    }
+
+    /* ═══════════════════════════════════════
+       NAVIGATION
+     ═══════════════════════════════════════ */
+    #navbar {
+      position: fixed;
+      top: 0; width: 100%;
+      padding: 1.25rem 0;
+      z-index: 200;
+      transition: all 0.4s var(--ease-out);
+    }
+
+    #navbar.scrolled {
+      padding: 0.875rem 0;
+      background: rgba(2, 4, 8, 0.85);
+      backdrop-filter: blur(20px) saturate(1.6);
+      border-bottom: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 40px rgba(0,0,0,0.5);
+    }
+
+    .nav-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 1.25rem;
+      letter-spacing: -0.02em;
+      color: var(--text-100);
+    }
+
+    .logo-mark {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--cyan-500), var(--blue-500));
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.875rem;
+      color: #020408;
+      box-shadow: 0 2px 12px var(--primary-glow);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-pill);
+      padding: 0.375rem;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-400);
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.4rem 1rem;
+      border-radius: var(--radius-pill);
+      transition: all 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-100);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: all 0.25s var(--ease-spring);
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--cyan-500), var(--blue-500));
+      color: #020408;
+      box-shadow: 0 2px 12px var(--primary-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(6,182,212,0.45);
+    }
+
+    .btn-ghost {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-200);
+      border: 1px solid var(--border-medium);
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+
+    /* ═══════════════════════════════════════
+       HERO
+     ═══════════════════════════════════════ */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 7rem 0 5rem;
+      position: relative;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      align-items: center;
+      gap: 4rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.625rem;
+      background: rgba(6,182,212,0.08);
+      border: 1px solid rgba(6,182,212,0.2);
+      color: var(--cyan-400);
+      padding: 0.4rem 1rem 0.4rem 0.625rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      margin-bottom: 2rem;
+    }
+
+    .pulse-ring {
+      position: relative;
+      width: 8px; height: 8px;
+    }
+    .pulse-ring::before,
+    .pulse-ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--cyan-400);
+      border-radius: 50%;
+    }
+    .pulse-ring::after {
+      animation: ping 1.5s cubic-bezier(0,0,0.2,1) infinite;
+      opacity: 0.6;
+    }
+    @keyframes ping {
+      75%, 100% { transform: scale(2.5); opacity: 0; }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.75rem, 5vw, 4.5rem);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-sub {
+      font-size: 1.125rem;
+      color: var(--text-400);
+      line-height: 1.75;
+      margin-bottom: 2.5rem;
+      max-width: 540px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-lg {
+      padding: 0.875rem 1.75rem;
+      font-size: 1rem;
+    }
+
+    .stat-strip {
+      display: flex;
+      gap: 2rem;
+      margin-top: 3.5rem;
+      padding-top: 2.5rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .stat-item { flex: 1; }
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-400);
+      font-weight: 500;
+    }
+
+    /* ═══════════════════════════════════════
+       TERMINAL WINDOW (SHOWCASE PIPELINE)
+     ═══════════════════════════════════════ */
+    .terminal-wrap {
+      position: relative;
+    }
+
+    .terminal-glow {
+      position: absolute;
+      inset: -20px;
+      background: radial-gradient(circle at 50% 50%, rgba(6,182,212,0.10), transparent 70%);
+      border-radius: 50%;
+      z-index: -1;
+    }
+
+    .agent-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.02);
+    }
+
+    .win-bar {
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.875rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .win-dots { display: flex; gap: 6px; }
+    .win-dot {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+    }
+    .win-dot.r { background: #ff5f57; }
+    .win-dot.y { background: #ffbd2e; }
+    .win-dot.g { background: #28c840; }
+
+    .win-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-400);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .win-badge {
+      background: rgba(34,211,238,0.1);
+      color: var(--cyan-400);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-pill);
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(34,211,238,0.15);
+    }
+
+    .win-body {
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+      min-height: 340px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .terminal-line {
+      font-size: 0.78rem;
+      line-height: 1.5;
+      color: var(--text-200);
+      animation: line-in 0.4s var(--ease-out) both;
+    }
+
+    @keyframes line-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .terminal-prompt {
+      color: var(--cyan-400);
+      margin-right: 0.5rem;
+    }
+
+    .terminal-success {
+      color: var(--emerald-400);
+    }
+
+    .terminal-warning {
+      color: var(--amber-400);
+    }
+
+    .progress-reporter {
+      margin-top: 0.5rem;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.875rem;
+    }
+
+    .progress-title {
+      font-size: 0.75rem;
+      color: var(--text-400);
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-container {
+      height: 4px;
+      background: var(--border-subtle);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 72%;
+      background: linear-gradient(90deg, var(--cyan-500), var(--blue-500));
+      border-radius: var(--radius-pill);
+      animation: fill-pulse 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes fill-pulse {
+      from { filter: brightness(1); }
+      to { filter: brightness(1.2); }
+    }
+
+    /* ═══════════════════════════════════════
+       SECTION LAYOUTS
+     ═══════════════════════════════════════ */
+    section {
+      padding: 7rem 0;
+    }
+
+    .section-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin-bottom: 1.25rem;
+    }
+
+    .section-eyebrow::before {
+      content: '';
+      display: block;
+      width: 20px; height: 2px;
+      background: var(--primary);
+      border-radius: 1px;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 3.5vw, 3rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-sub {
+      font-size: 1.0625rem;
+      color: var(--text-400);
+      line-height: 1.75;
+      max-width: 540px;
+    }
+
+    /* ═══════════════════════════════════════
+       PROBLEM / SOLUTION (Bento Grid Style)
+     ═══════════════════════════════════════ */
+    .problem-solution {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    .ps-card {
+      border-radius: var(--radius-lg);
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ps-card.problem-card {
+      background: rgba(244, 63, 94, 0.03);
+      border: 1px solid rgba(244, 63, 94, 0.12);
+    }
+
+    .ps-card.solution-card {
+      background: rgba(6, 182, 212, 0.03);
+      border: 1px solid rgba(6, 182, 212, 0.12);
+    }
+
+    .ps-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.75rem;
+      border-radius: var(--radius-pill);
+      margin-bottom: 1.5rem;
+    }
+    .problem-card .ps-label {
+      background: rgba(244, 63, 94, 0.10);
+      color: var(--rose-500);
+      border: 1px solid rgba(244, 63, 94, 0.16);
+    }
+    .solution-card .ps-label {
+      background: rgba(6, 182, 212, 0.10);
+      color: var(--cyan-400);
+      border: 1px solid rgba(6, 182, 212, 0.16);
+    }
+
+    .ps-heading {
+      font-size: 1.375rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+
+    .ps-body {
+      font-size: 0.9375rem;
+      color: var(--text-400);
+      line-height: 1.75;
+      margin-bottom: 1.75rem;
+    }
+
+    .ps-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.625rem;
+    }
+
+    .ps-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.625rem;
+      font-size: 0.875rem;
+      color: var(--text-400);
+    }
+
+    .ps-list li .icon {
+      font-size: 0.75rem;
+      margin-top: 0.15rem;
+      flex-shrink: 0;
+    }
+    .problem-card .icon { color: var(--rose-500); }
+    .solution-card .icon { color: var(--cyan-400); }
+
+    /* ═══════════════════════════════════════
+       FEATURES BENTO
+     ═══════════════════════════════════════ */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.25rem;
+      margin-top: 3rem;
+    }
+
+    .bento {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      transition: all 0.3s var(--ease-out);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(6,182,212,0.03) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .bento:hover::before { opacity: 1; }
+    .bento:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .bento-a { grid-column: span 7; }
+    .bento-b { grid-column: span 5; }
+    .bento-c { grid-column: span 4; }
+    .bento-d { grid-column: span 4; }
+    .bento-e { grid-column: span 4; }
+
+    .bento-icon {
+      width: 44px; height: 44px;
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    .bento-icon-cyan {
+      background: rgba(6,182,212,0.12);
+      color: var(--cyan-400);
+      box-shadow: 0 0 20px rgba(6,182,212,0.15);
+    }
+    .bento-icon-blue {
+      background: rgba(59,130,246,0.12);
+      color: var(--blue-400);
+      box-shadow: 0 0 20px rgba(59,130,246,0.15);
+    }
+    .bento-icon-violet {
+      background: rgba(139,92,246,0.12);
+      color: var(--violet-500);
+      box-shadow: 0 0 20px rgba(139,92,246,0.15);
+    }
+    .bento-icon-green {
+      background: rgba(16,185,129,0.12);
+      color: var(--emerald-400);
+      box-shadow: 0 0 20px rgba(16,185,129,0.15);
+    }
+
+    .bento h3 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.625rem;
+    }
+
+    .bento p {
+      font-size: 0.9rem;
+      color: var(--text-400);
+      line-height: 1.7;
+    }
+
+    .code-block {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      margin-top: 1.25rem;
+      overflow-x: auto;
+    }
+
+    .code-comment { color: var(--text-600); }
+    .code-key { color: var(--cyan-400); }
+    .code-str { color: var(--emerald-400); }
+    .code-num { color: var(--amber-400); }
+    .code-bracket { color: var(--text-400); }
+
+    /* ═══════════════════════════════════════
+       PIPELINE TIMELINE
+     ═══════════════════════════════════════ */
+    #pipeline {
+      background: rgba(255,255,255,0.005);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .pipeline-header {
+      text-align: center;
+      margin-bottom: 5rem;
+    }
+
+    .pipeline-header .section-eyebrow {
+      justify-content: center;
+    }
+
+    .pipeline-track {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+    }
+
+    .pipeline-track::before {
+      content: '';
+      position: absolute;
+      top: 36px;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        var(--border-medium) 10%,
+        var(--border-medium) 90%,
+        transparent 100%
+      );
+    }
+
+    .pipe-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 0 1rem;
+      position: relative;
+    }
+
+    .pipe-orb {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      z-index: 1;
+      transition: transform 0.3s var(--ease-spring);
+    }
+    .pipe-orb:hover { transform: scale(1.1); }
+
+    .pipe-orb-1 { background: rgba(6,182,212,0.12); color: var(--cyan-400); border: 1px solid rgba(6,182,212,0.2); }
+    .pipe-orb-2 { background: rgba(59,130,246,0.12); color: var(--blue-400); border: 1px solid rgba(59,130,246,0.2); }
+    .pipe-orb-3 { background: rgba(139,92,246,0.12); color: var(--violet-500); border: 1px solid rgba(139,92,246,0.2); }
+    .pipe-orb-4 { background: rgba(16,185,129,0.12); color: var(--emerald-400); border: 1px solid rgba(16,185,129,0.2); }
+    .pipe-orb-5 { background: rgba(251,191,36,0.12); color: var(--amber-400); border: 1px solid rgba(251,191,36,0.2); }
+
+    .pipe-step {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-600);
+      margin-bottom: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pipe-title {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.5rem;
+    }
+
+    .pipe-desc {
+      font-size: 0.8125rem;
+      color: var(--text-400);
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════
+       SHOWCASE (SPLIT VIEW ANIMATION)
+     ═══════════════════════════════════════ */
+    .showcase-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .showcase-frame {
+      position: relative;
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      border: 1px solid var(--border-medium);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .showcase-bar {
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.875rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .showcase-dots { display: flex; gap: 6px; }
+    .showcase-dot {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+    }
+
+    .split-view {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      background: #060910;
+    }
+
+    .split-pane {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .split-pane img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .split-pane.before {
+      z-index: 1;
+      width: 100%;
+      border-right: 2px solid var(--primary);
+      box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+      animation: split-sweep 7s ease-in-out infinite;
+    }
+
+    @keyframes split-sweep {
+      0% { width: 100%; }
+      15% { width: 100%; }
+      45% { width: 0%; }
+      70% { width: 0%; }
+      100% { width: 100%; }
+    }
+
+    .split-pane.after {
+      z-index: 0;
+    }
+
+    .pane-label {
+      position: absolute;
+      top: 1.25rem;
+      left: 1.25rem;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 0.4rem 0.875rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 2;
+    }
+
+    .pane-label.before {
+      color: var(--text-400);
+      animation: label-before-fade 7s ease-in-out infinite;
+    }
+    .pane-label.after {
+      color: var(--cyan-400);
+      animation: label-after-fade 7s ease-in-out infinite;
+    }
+
+    @keyframes label-before-fade {
+      0% { opacity: 1; }
+      15% { opacity: 1; }
+      45% { opacity: 0; }
+      70% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    @keyframes label-after-fade {
+      0% { opacity: 0; }
+      15% { opacity: 0; }
+      45% { opacity: 1; }
+      70% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    .showcase-meta {
+      margin-top: 2.5rem;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+
+    .meta-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .meta-icon {
+      font-size: 1.25rem;
+      width: 40px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .meta-text .meta-title {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+    }
+
+    .meta-text .meta-desc {
+      font-size: 0.75rem;
+      color: var(--text-400);
+    }
+
+    /* ═══════════════════════════════════════
+       FOOTER
+     ═══════════════════════════════════════ */
+    footer {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-inner {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .footer-left .logo { margin-bottom: 0.625rem; }
+
+    .footer-tagline {
+      font-size: 0.85rem;
+      color: var(--text-600);
+      margin-left: 0.25rem;
+    }
+
+    .footer-copy {
+      font-size: 0.8rem;
+      color: var(--text-600);
+      margin-top: 0.375rem;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .footer-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-400);
+      text-decoration: none;
+      border: 1px solid var(--border-subtle);
+      transition: all 0.2s;
+    }
+    .footer-link:hover {
+      color: var(--text-100);
+      border-color: var(--border-medium);
+      background: rgba(255,255,255,0.04);
+    }
+
+    /* ═══════════════════════════════════════
+       SCROLL REVEAL ANIMATIONS
+     ═══════════════════════════════════════ */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.65s var(--ease-out), transform 0.65s var(--ease-out);
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ═══════════════════════════════════════
+       RESPONSIVE
+     ═══════════════════════════════════════ */
+    @media (max-width: 1024px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 4rem; }
+      .hero { min-height: auto; padding: 8rem 0 5rem; }
+      .hero-sub { max-width: none; }
+      .stat-strip { gap: 1.5rem; }
+
+      .problem-solution { grid-template-columns: 1fr; }
+
+      .bento-a { grid-column: span 12; }
+      .bento-b { grid-column: span 12; }
+      .bento-c, .bento-d, .bento-e { grid-column: span 12; }
+
+      .pipeline-track {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+      .pipeline-track::before { display: none; }
+      .pipe-node { flex-direction: row; text-align: left; gap: 1.25rem; }
+      .pipe-orb { margin-bottom: 0; flex-shrink: 0; }
+
+      .split-view { aspect-ratio: 4 / 3; }
+      .showcase-meta { grid-template-columns: 1fr; }
+      .footer-inner { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .hero h1 { font-size: 2.5rem; }
+      .split-view { aspect-ratio: 1 / 1; }
+      .split-pane { height: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ░░ CANVAS BACKGROUND ░░ -->
+  <div class="bg-canvas" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <!-- ░░ NAVIGATION ░░ -->
+  <nav id="navbar">
+    <div class="container nav-inner">
+      <a href="#" class="logo">
+        <div class="logo-mark"><i class="fas fa-file-archive"></i></div>
+        <span>Omni<span class="gradient-text">doc</span></span>
+      </a>
+
+      <div class="nav-links">
+        <a href="#why">Why</a>
+        <a href="#features">Features</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#demo">Showcase</a>
+      </div>
+
+      <a href="https://github.com/mbettan/omnidoc" target="_blank" rel="noopener" class="btn btn-primary">
+        <i class="fab fa-github"></i>
+        View on GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- ░░ HERO ░░ -->
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+
+      <!-- Left: Hero Copy -->
+      <div class="hero-copy">
+        <div class="status-pill">
+          <div class="pulse-ring"></div>
+          Omnidoc v1.1.0 &mdash; Ingestion Manifests & Explicit Video Skipping Live
+        </div>
+
+        <h1>
+          Ingest Any ZIP.<br>
+          <span class="gradient-text">Ready for LLMs.</span>
+        </h1>
+
+        <p class="hero-sub">
+          Heterogeneous archives are a headache for LLMs. Omnidoc recursively walks any ZIP file, parses complex files, extracts metadata, OCRs scanned docs, and emits a single, beautifully formatted, structured Markdown or PDF document.
+        </p>
+
+        <div class="hero-actions">
+          <a href="#demo" class="btn btn-primary btn-lg">
+            <i class="fas fa-eye"></i>
+            See the Output
+          </a>
+          <a href="#features" class="btn btn-ghost btn-lg">
+            Explore Features
+            <i class="fas fa-arrow-right"></i>
+          </a>
+        </div>
+
+        <div class="stat-strip">
+          <div class="stat-item">
+            <div class="stat-value gradient-text">100%</div>
+            <div class="stat-label">Offline Local Execution</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value gradient-text">Zero</div>
+            <div class="stat-label">Developer Preprocessing</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value gradient-text-purple">&lt; 60s</div>
+            <div class="stat-label">For 100 heterogeneous files</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Animated Terminal -->
+      <div class="terminal-wrap">
+        <div class="terminal-glow"></div>
+        <div class="agent-window">
+          <div class="win-bar">
+            <div class="win-dots">
+              <div class="win-dot r"></div>
+              <div class="win-dot y"></div>
+              <div class="win-dot g"></div>
+            </div>
+            <div class="win-title">omnidoc --format md input.zip</div>
+            <div class="win-badge">READY</div>
+          </div>
+
+          <div class="win-body">
+            <div class="terminal-line" style="animation-delay: 0.2s">
+              <span class="terminal-prompt">$</span> omnidoc archive_bundle.zip --pdf
+            </div>
+            <div class="terminal-line" style="animation-delay: 0.6s">
+              Processing 12 files...
+            </div>
+            <div class="terminal-line" style="animation-delay: 1.0s">
+              [1/12] Ingesting: <span class="terminal-success">README.md</span> (Markdown)
+            </div>
+            <div class="terminal-line" style="animation-delay: 1.4s">
+              [2/12] Ingesting: <span class="terminal-success">contract_scan.pdf</span> (OCR Fallback &mdash; 88% Conf)
+            </div>
+            <div class="terminal-line" style="animation-delay: 1.8s">
+              [3/12] Ingesting: <span class="terminal-success">quarterly_financials.xlsx</span> (openpyxl &mdash; 4 sheets)
+            </div>
+            <div class="terminal-line" style="animation-delay: 2.2s">
+              [4/12] Ingesting: <span class="terminal-warning">lecture_recording.mp4</span> (Skipped Media File)
+            </div>
+            
+            <div class="progress-reporter" style="animation-delay: 2.6s; animation: line-in 0.4s ease-out both;">
+              <div class="progress-title">✓ Generating Archive Directory Manifest table...</div>
+              <div class="progress-title">✓ Rendering PDF version (ReportLab)...</div>
+              <div class="progress-bar-container">
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+            
+            <div class="terminal-line terminal-success" style="animation-delay: 3.2s">
+              ✓ SUCCESS: Output markdown written to `archive_bundle_llm.md`
+            </div>
+            <div class="terminal-line terminal-success" style="animation-delay: 3.6s">
+              ✓ SUCCESS: Companion PDF written to `archive_bundle_llm.pdf`
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ░░ WHY OMNIDOC ░░ -->
+  <section id="why">
+    <div class="container">
+      <div class="reveal">
+        <div class="section-eyebrow">The Challenge</div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; flex-wrap: wrap; gap: 1rem;">
+          <h2 class="section-title" style="margin-bottom: 0; max-width: 520px;">
+            Heterogeneous archives<br><span class="gradient-text">break LLM parsing.</span>
+          </h2>
+          <p class="section-sub" style="font-size: 0.9375rem;">
+            LLMs are outstanding at consuming unified text. But real-world data dumps are cluttered with PDFs containing embedded images, complex multi-sheet Excel trackers, raw CSV tables, and media files. Omnidoc binds them all elegantly into one clean, structured context.
+          </p>
+        </div>
+      </div>
+
+      <div class="problem-solution reveal">
+        <!-- The Old Way -->
+        <div class="ps-card problem-card">
+          <div class="ps-label"><i class="fas fa-times-circle"></i> The Old Way</div>
+          <h3 class="ps-heading">Ad-hoc Scripting & Dropped Sheets</h3>
+          <p class="ps-body">
+            Developers spend hours writing fragile scripts to extract text from files, manually translating Excel worksheets, ignoring scanned receipts, and silently dropping media contexts.
+          </p>
+          <ul class="ps-list">
+            <li><span class="icon"><i class="fas fa-times-circle"></i></span> Scanned PDF pages are passed as blank strings</li>
+            <li><span class="icon"><i class="fas fa-times-circle"></i></span> Excels have only the first sheet active tab copied</li>
+            <li><span class="icon"><i class="fas fa-times-circle"></i></span> Local zip files contain no visual provenance anchors</li>
+            <li><span class="icon"><i class="fas fa-times-circle"></i></span> No structure: raw, unformatted text blobs overload the LLM</li>
+          </ul>
+        </div>
+
+        <!-- The New Way -->
+        <div class="ps-card solution-card">
+          <div class="ps-label"><i class="fas fa-check-circle"></i> The New Way</div>
+          <h3 class="ps-heading">Structured, Standardized Ingestion</h3>
+          <p class="ps-body">
+            A single command generates a beautifully structured, standardized Markdown or PDF document with recursive file manifests, OCR fallback, and clear file separator boundaries.
+          </p>
+          <ul class="ps-list">
+            <li><span class="icon"><i class="fas fa-check-circle"></i></span> Deep recursive walking of nested archives</li>
+            <li><span class="icon"><i class="fas fa-check-circle"></i></span> High-fidelity Excel multi-sheet Markdown table serialization</li>
+            <li><span class="icon"><i class="fas fa-check-circle"></i></span> Local Tesseract OCR fallback with confidence indicators</li>
+            <li><span class="icon"><i class="fas fa-check-circle"></i></span> Companion visual PDF generated for low-confidence images</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ FEATURES BENTO ░░ -->
+  <section id="features">
+    <div class="container">
+      <div class="reveal" style="margin-bottom: 4rem;">
+        <div class="section-eyebrow">Engine Capabilities</div>
+        <h2 class="section-title">
+          Powering LLMs with<br>
+          <span class="gradient-text">perfect context structure.</span>
+        </h2>
+      </div>
+
+      <div class="bento-grid reveal">
+        <!-- Multi-Format Routing -->
+        <div class="bento bento-a">
+          <div class="bento-icon bento-icon-cyan">
+            <i class="fas fa-route"></i>
+          </div>
+          <h3>Intelligent Format Router</h3>
+          <p>
+            Omnidoc handles different file types dynamically. It uses file extensions and byte content sniffing to dispatch the perfect custom extractor for PDFs, Excels, images, XML/HTML, raw text, and source code.
+          </p>
+          <div class="code-block">
+            <span class="code-comment"># Registering extensions for custom ingestion routing</span><br>
+            EXT_MAP = <span class="code-bracket">{</span><br>
+            &nbsp;&nbsp;<span class="code-str">".pdf"</span>: (<span class="code-str">"PDF Document"</span>, extract_pdf),<br>
+            &nbsp;&nbsp;<span class="code-str">".xlsx"</span>: (<span class="code-str">"Excel Spreadsheet"</span>, extract_excel),<br>
+            &nbsp;&nbsp;<span class="code-str">".mp4"</span>: (<span class="code-str">"Video File"</span>, extract_unsupported)<br>
+            <span class="code-bracket">}</span>
+          </div>
+        </div>
+
+        <!-- Recusive Ingestion Manifest -->
+        <div class="bento bento-b">
+          <div class="bento-icon bento-icon-blue">
+            <i class="fas fa-sitemap"></i>
+          </div>
+          <h3>Recursive Directory Manifest</h3>
+          <p>
+            To ensure the LLM understands the global layout of the archive, Omnidoc generates a beautiful, comprehensive directory table at the top of the document showing paths, compressed/uncompressed sizes, modified dates, and file statuses.
+          </p>
+        </div>
+
+        <!-- Selective OCR -->
+        <div class="bento bento-c">
+          <div class="bento-icon bento-icon-violet">
+            <i class="fas fa-eye"></i>
+          </div>
+          <h3>Hybrid Scanned PDF Ingest</h3>
+          <p>
+            Extracts native text whenever possible, but falls back to pytesseract OCR for scanned pages, printing confidence margins and logging tracing metrics.
+          </p>
+        </div>
+
+        <!-- Explicit Skipping -->
+        <div class="bento bento-d">
+          <div class="bento-icon bento-icon-green">
+            <i class="fas fa-forward"></i>
+          </div>
+          <h3>Explicit Media Skipping</h3>
+          <p>
+            Large media files (such as .mp4 and .mov) are explicitly mapped and skipped. Instead of choking resources, they are rendered inline as clear context markers.
+          </p>
+        </div>
+
+        <!-- Visual Companion PDF -->
+        <div class="bento bento-e">
+          <div class="bento-icon bento-icon-cyan">
+            <i class="fas fa-images"></i>
+          </div>
+          <h3>Companion Visual Bundle</h3>
+          <p>
+            Low-confidence OCR pages are extracted as optimized images and compiled into a companion `<output>_visual.pdf` with stable anchors referenced in the main text.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ COMMAND CENTER DASHBOARD ░░ -->
+  <section id="dashboard-showcase" style="background: rgba(34, 211, 238, 0.01)">
+    <div class="container">
+      <div class="reveal" style="text-align: center; margin-bottom: 5rem;">
+        <div class="section-eyebrow">Visual Observability</div>
+        <h2 class="section-title">A Dashboard for Absolute<br><span class="gradient-text">Ingestion Metrics.</span></h2>
+        <p class="section-sub" style="margin: 0 auto;">
+          Omnidoc is fully observable. Monitor compression progress, track processing speeds, see OCR fallbacks, and trace extraction exceptions directly in a futuristic glassmorphic command center.
+        </p>
+      </div>
+
+      <div class="agent-window reveal" style="box-shadow: 0 0 100px rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.25);">
+        <div class="win-bar">
+          <div class="win-dots">
+            <div class="win-dot r"></div><div class="win-dot y"></div><div class="win-dot g"></div>
+          </div>
+          <div class="win-title">Omnidoc Engine Explorer &mdash; Ingest Analyzer</div>
+          <div class="win-badge">ACTIVE</div>
+        </div>
+        <div class="win-body" style="padding: 0; min-height: 500px; display: block; overflow: hidden;">
+          <img src="assets/execution_dashboard.png" alt="Omnidoc Engine Dashboard Mockup" style="width: 100%; height: auto; display: block;">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ PIPELINE TIMELINE ░░ -->
+  <section id="pipeline">
+    <div class="container">
+      <div class="pipeline-header reveal">
+        <div class="section-eyebrow">How It Works</div>
+        <h2 class="section-title">Under the Hood.</h2>
+        <p class="section-sub" style="margin: 0 auto;">
+          A robust, multi-stage ingestion loop designed for speed, offline reliability, and absolute data preservation.
+        </p>
+      </div>
+
+      <div class="pipeline-track reveal">
+        <!-- Step 1 -->
+        <div class="pipe-node">
+          <div class="pipe-orb pipe-orb-1"><i class="fas fa-file-archive"></i></div>
+          <div>
+            <div class="pipe-step">Step 01</div>
+            <div class="pipe-title">ZIP Walk</div>
+            <p class="pipe-desc">Walks the archive recursively to filter out OS metadata (`__MACOSX`, `.DS_Store`).</p>
+          </div>
+        </div>
+        <!-- Step 2 -->
+        <div class="pipe-node">
+          <div class="pipe-orb pipe-orb-2"><i class="fas fa-signature"></i></div>
+          <div>
+            <div class="pipe-step">Step 02</div>
+            <div class="pipe-title">Sniff & Route</div>
+            <p class="pipe-desc">Peeks at the raw bytes to resolve extensionless files and map them to extractors.</p>
+          </div>
+        </div>
+        <!-- Step 3 -->
+        <div class="pipe-node">
+          <div class="pipe-orb pipe-orb-3"><i class="fas fa-cogs"></i></div>
+          <div>
+            <div class="pipe-step">Step 03</div>
+            <div class="pipe-title">Parse & Extract</div>
+            <p class="pipe-desc">Parses tables, decodes binary layouts, and formats data natively into markdown structures.</p>
+          </div>
+        </div>
+        <!-- Step 4 -->
+        <div class="pipe-node">
+          <div class="pipe-orb pipe-orb-4"><i class="fas fa-compress-alt"></i></div>
+          <div>
+            <div class="pipe-step">Step 04</div>
+            <div class="pipe-title">Consolidate</div>
+            <p class="pipe-desc">Truncates output by token constraints and merges low-confidence images into the Visual PDF.</p>
+          </div>
+        </div>
+        <!-- Step 5 -->
+        <div class="pipe-node">
+          <div class="pipe-orb pipe-orb-5"><i class="fas fa-file-code"></i></div>
+          <div>
+            <div class="pipe-step">Step 05</div>
+            <div class="pipe-title">Assembly</div>
+            <p class="pipe-desc">Emits a single output document featuring the complete recursive manifest and clean text blocks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ SHOWCASE COMPARISON ░░ -->
+  <section id="demo">
+    <div class="container">
+      <div class="showcase-header reveal">
+        <div class="section-eyebrow">Interactive Split Ingest</div>
+        <h2 class="section-title">
+          Transform messy files into<br>
+          <span class="gradient-text">structured markdown context.</span>
+        </h2>
+        <p class="section-sub" style="margin: 0 auto;">
+          Hover or sweep across the split window to witness how Omnidoc translates a complex, uncompressed raw ZIP archive into a clean, structured Markdown report ready to feed any LLM.
+        </p>
+      </div>
+
+      <div class="showcase-frame reveal">
+        <div class="showcase-bar">
+          <div class="showcase-dots">
+            <div class="showcase-dot win-dot r"></div>
+            <div class="showcase-dot win-dot y"></div>
+            <div class="showcase-dot win-dot g"></div>
+          </div>
+          <div style="flex: 1; display: flex; justify-content: center;">
+            <div style="background: rgba(0,0,0,0.3); border-radius: var(--radius-pill); padding: 0.3rem 1.25rem; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; color: var(--text-400);">
+              📁 input_archive.zip &mdash;&rarr; output_llm.md
+            </div>
+          </div>
+          <div class="win-badge" style="background: rgba(16,185,129,0.1); color: var(--emerald-400); border-color: rgba(16,185,129,0.2);">
+            INGESTION PASSED
+          </div>
+        </div>
+
+        <div class="split-view">
+          <!-- The 'After' state: Beautiful structured Markdown output -->
+          <div class="split-pane after">
+            <img src="assets/markdown_output.png" alt="Structured Markdown Ingestion Output">
+            <div class="pane-label after" style="top: 1.25rem; bottom: auto; right: 1.25rem; left: auto;">
+              <i class="fas fa-check-circle"></i>
+              STRUCTURED OMNIDOC OUTPUT
+            </div>
+          </div>
+
+          <!-- The 'Before' state: Messy Zip files contents -->
+          <div class="split-pane before">
+            <img src="assets/zip_contents.png" alt="Raw ZIP Contents before processing">
+            <div class="pane-label before" style="top: 1.25rem; bottom: auto;">
+              <i class="fas fa-folder-open"></i>
+              RAW FRAGMENTED ZIP ARCHIVE
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="showcase-meta reveal">
+        <div class="meta-card">
+          <div class="meta-icon" style="color: var(--cyan-400);">
+            <i class="fas fa-folder-tree"></i>
+          </div>
+          <div class="meta-text">
+            <div class="meta-title">Manifest Injected</div>
+            <div class="meta-desc">Full folder structure mapped recursively and documented transparently in a Markdown table</div>
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-icon" style="color: var(--emerald-400);">
+            <i class="fas fa-table"></i>
+          </div>
+          <div class="meta-text">
+            <div class="meta-title">Tables Serialized</div>
+            <div class="meta-desc">Spreadsheets and Excel workbooks converted directly into cleanly aligned markdown table structures</div>
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-icon" style="color: var(--amber-400);">
+            <i class="fas fa-forward"></i>
+          </div>
+          <div class="meta-text">
+            <div class="meta-title">Explicit Skipping</div>
+            <div class="meta-desc">Unsupported media files gracefully bypassed and logged without exhausting local resources</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ FOOTER ░░ -->
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-left">
+        <a href="#" class="logo">
+          <div class="logo-mark"><i class="fas fa-file-archive"></i></div>
+          <span>Omni<span class="gradient-text">doc</span></span>
+        </a>
+        <div class="footer-tagline">Prepare your heterogeneous data for the future of LLM ingestion.</div>
+        <div class="footer-copy">&copy; 2026 Omnidoc Engine. Locally designed, premium developer tools.</div>
+      </div>
+
+      <div class="footer-links">
+        <a href="https://github.com/mbettan/omnidoc" class="footer-link" target="_blank" rel="noopener">
+          <i class="fab fa-github"></i>
+          GitHub Repository
+        </a>
+        <a href="#top" class="footer-link">
+          <i class="fas fa-arrow-up"></i>
+          Back to Top
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ░░ SCROLL REVEAL SCRIPT ░░ -->
+  <script>
+    const reveals = document.querySelectorAll('.reveal');
+    const navbar = document.getElementById('navbar');
+
+    function handleScroll() {
+      // Navbar blur trigger
+      if (window.scrollY > 50) {
+        navbar.classList.add('scrolled');
+      } else {
+        navbar.classList.remove('scrolled');
+      }
+
+      // Fade-in reveals
+      const windowHeight = window.innerHeight;
+      reveals.forEach(el => {
+        const elementTop = el.getBoundingClientRect().top;
+        const elementVisible = 100;
+        if (elementTop < windowHeight - elementVisible) {
+          el.classList.add('visible');
+        }
+      });
+    }
+
+    window.addEventListener('scroll', handleScroll);
+    // Initial trigger on load
+    window.addEventListener('DOMContentLoaded', handleScroll);
+  </script>
+
+</body>
+</html>

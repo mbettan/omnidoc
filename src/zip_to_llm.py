@@ -18,6 +18,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
+__version__ = "1.1.0"
+
 # ---------------------------------------------------------------------------
 # Optional dependency imports (graceful degradation)
 # ---------------------------------------------------------------------------
@@ -217,6 +219,11 @@ def strip_html(html: str) -> str:
 
 
 _TESSERACT_AVAILABLE: Optional[bool] = None
+
+def _reset_tesseract_cache() -> None:
+    """Reset the cached Tesseract availability status (primarily for tests)."""
+    global _TESSERACT_AVAILABLE
+    _TESSERACT_AVAILABLE = None
 
 def is_tesseract_available() -> bool:
     global _TESSERACT_AVAILABLE
@@ -698,17 +705,23 @@ def extract_excel(data: bytes, name: str, fmt: Optional[OutputFormatter] = None,
     except Exception as e:
         return fmt.italic_note(f"Excel parse error: {e}")
 
-    sections = []
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        rows = []
-        for row in ws.iter_rows(values_only=True):
-            rows.append(["" if v is None else str(v) for v in row])
-        while rows and not any(c.strip() for c in rows[-1]):
-            rows.pop()
-        body = fmt.table(rows) if rows else fmt.italic_note("empty sheet")
-        sections.append(f"{fmt.h4(f'Sheet: {sheet_name}')}\n\n{body}")
-    return "\n\n".join(sections) if sections else fmt.italic_note("no sheets")
+    try:
+        sections = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                rows.append(["" if v is None else str(v) for v in row])
+            while rows and not any(c.strip() for c in rows[-1]):
+                rows.pop()
+            body = fmt.table(rows) if rows else fmt.italic_note("empty sheet")
+            sections.append(f"{fmt.h4(f'Sheet: {sheet_name}')}\n\n{body}")
+        return "\n\n".join(sections) if sections else fmt.italic_note("no sheets")
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
 
 
 def extract_csv(data: bytes, name: str, fmt: Optional[OutputFormatter] = None,
@@ -831,6 +844,12 @@ def extract_unsupported(data: bytes, name: str, fmt: Optional[OutputFormatter] =
     opts = opts or ExtractOptions()
     ext = Path(name).suffix.lower()
     ext_label = ext if ext else "no extension"
+    if ext == ".doc":
+        return fmt.italic_note("Legacy .doc format not supported (only .docx); consider converting to .docx")
+    if ext == ".ppt":
+        return fmt.italic_note("Legacy .ppt format not supported (only .pptx); consider converting to .pptx")
+    if ext == ".xls":
+        return fmt.italic_note("Legacy .xls format not supported (only .xlsx); consider converting to .xlsx")
     return fmt.italic_note(
         f"unsupported file type ({ext_label}) — skipped")
 
@@ -850,13 +869,13 @@ EXT_MAP: Dict[str, Tuple[str, Callable]] = {
     ".webp": ("Image", extract_image),
     ".xlsx": ("Excel Spreadsheet", extract_excel),
     ".xlsm": ("Excel Spreadsheet", extract_excel),
-    ".xls":  ("Excel Spreadsheet", extract_excel),
+    ".xls":  ("Legacy Excel Spreadsheet", extract_unsupported),
     ".csv":  ("CSV", extract_csv),
     ".tsv":  ("TSV", extract_tsv),
     ".docx": ("Word Document", extract_docx),
-    ".doc":  ("Word Document", extract_docx),
+    ".doc":  ("Legacy Word Document", extract_unsupported),
     ".pptx": ("PowerPoint", extract_pptx),
-    ".ppt":  ("PowerPoint", extract_pptx),
+    ".ppt":  ("Legacy PowerPoint", extract_unsupported),
     ".txt":  ("Text", extract_text),
     ".md":   ("Markdown", extract_text),
     ".json": ("JSON", extract_text),
@@ -1299,7 +1318,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Suppress non-error output")
     parser.add_argument("-V", "--version", action="version",
-                        version="omnidoc 1.1.0")
+                        version=f"omnidoc {__version__}")
 
     args = parser.parse_args(argv)
 

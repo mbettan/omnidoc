@@ -35,16 +35,21 @@ def test_extract_image_ocr_success_long_text():
     with mock.patch.object(ztl, 'pytesseract') as mock_tesseract, \
          mock.patch.object(ztl, 'genai') as mock_genai:
         
-        mock_tesseract.image_to_string.return_value = long_text
+        # Mock image_to_data to return a valid dictionary representing successful high confidence OCR
+        mock_tesseract.image_to_data.return_value = {
+            "conf": [90] * len(long_text.split()),
+            "text": long_text.split()
+        }
+        mock_tesseract.Output.DICT = 'dict'
         
         out = ztl.extract_image(img_bytes, "scanned_doc.png")
 
-        # Verify Tesseract was called
-        mock_tesseract.image_to_string.assert_called_once()
+        # Verify Tesseract was called for primary path (image_to_data)
+        mock_tesseract.image_to_data.assert_called_once()
         # Verify Gemini was never called
         mock_genai.Client.assert_not_called()
 
-        assert long_text.strip() in out
+        assert "This is a very long document" in out
 
 
 def test_extract_image_8k_resolution_no_text():
@@ -57,7 +62,9 @@ def test_extract_image_8k_resolution_no_text():
          mock.patch.object(ztl, 'types') as mock_types, \
          mock.patch.dict(os.environ, {"PROJECT_ID": "test-project", "OMNIDOC_VISION_MODEL": "gemini-3.1-pro-preview"}):
         
+        mock_tesseract.image_to_data.return_value = {"conf": [], "text": []}
         mock_tesseract.image_to_string.return_value = ""
+        mock_tesseract.Output.DICT = 'dict'
         
         mock_client_instance = mock.MagicMock()
         mock_genai.Client.return_value = mock_client_instance
@@ -68,7 +75,8 @@ def test_extract_image_8k_resolution_no_text():
         opts = ztl.ExtractOptions(vision_fallback="gemini")
         out = ztl.extract_image(img_bytes, "8k_photo.png", opts=opts)
 
-        mock_tesseract.image_to_string.assert_called_once()
+        mock_tesseract.image_to_data.assert_called_once()
+        mock_tesseract.image_to_string.assert_not_called()
         mock_genai.Client.assert_called_once_with(vertexai=True, project="test-project", location="global")
         mock_client_instance.models.generate_content.assert_called_once()
         
@@ -88,7 +96,9 @@ def test_extract_image_gemini_fallback_api_error():
          mock.patch.object(ztl, 'types') as mock_types, \
          mock.patch.dict(os.environ, {"PROJECT_ID": "test-project"}):
         
+        mock_tesseract.image_to_data.return_value = {"conf": [], "text": []}
         mock_tesseract.image_to_string.return_value = ""
+        mock_tesseract.Output.DICT = 'dict'
         
         mock_client_instance = mock.MagicMock()
         mock_genai.Client.return_value = mock_client_instance
@@ -98,7 +108,8 @@ def test_extract_image_gemini_fallback_api_error():
         opts = ztl.ExtractOptions(vision_fallback="gemini")
         out = ztl.extract_image(img_bytes, "error_photo.png", opts=opts)
 
-        mock_tesseract.image_to_string.assert_called_once()
+        mock_tesseract.image_to_data.assert_called_once()
+        mock_tesseract.image_to_string.assert_not_called()
         mock_client_instance.models.generate_content.assert_called_once()
 
         assert "vision fallback error: Vertex AI quota exceeded" in out
@@ -111,11 +122,13 @@ def test_extract_image_ocr_exception():
     with mock.patch.object(ztl, 'pytesseract') as mock_tesseract, \
          mock.patch.object(ztl, 'genai') as mock_genai:
         
+        mock_tesseract.image_to_data.side_effect = RuntimeError("Tesseract binary not found")
         mock_tesseract.image_to_string.side_effect = RuntimeError("Tesseract binary not found")
+        mock_tesseract.Output.DICT = 'dict'
         
         out = ztl.extract_image(img_bytes, "corrupt.png")
 
-        mock_tesseract.image_to_string.assert_called_once()
+        mock_tesseract.image_to_data.assert_called_once()
         mock_genai.Client.assert_not_called()
 
         assert "_[Image OCR error: Tesseract binary not found]_" in out
@@ -144,9 +157,12 @@ def test_extract_image_no_genai_sdk(monkeypatch):
     monkeypatch.setattr(ztl, 'genai', None)
 
     with mock.patch.object(ztl, 'pytesseract') as mock_tesseract:
+        mock_tesseract.image_to_data.return_value = {"conf": [], "text": []}
         mock_tesseract.image_to_string.return_value = ""
+        mock_tesseract.Output.DICT = 'dict'
 
         out = ztl.extract_image(img_bytes, "no_sdk.png")
 
-        mock_tesseract.image_to_string.assert_called_once()
+        mock_tesseract.image_to_data.assert_called_once()
+        mock_tesseract.image_to_string.assert_not_called()
         assert "_[no text detected by OCR]_" in out

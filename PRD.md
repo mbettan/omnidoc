@@ -1,9 +1,9 @@
 # Omnidoc — Product Requirements Document
 
-**Version:** 1.0
-**Status:** Draft
+**Version:** 1.1.0
+**Status:** Final
 **Date:** May 2026
-**Classification:** Internal — Confidential
+**Classification:** Open Source (Apache License 2.0)
 
 ---
 
@@ -67,14 +67,14 @@ Today's ad-hoc pipeline for this is error-prone and time-consuming:
 - Preserve structure: Excel sheet names, PDF page numbers, slide numbering
 - Emit a single Markdown file with a table of contents and clear file separators
 - Optionally render that Markdown as a PDF for LLMs that prefer document inputs
-- Run entirely offline with no external API calls
-- Be installable with a single `pip install` command
+- Run entirely offline with no external API calls (with optional cloud fallback)
+- Be installable with a single `pip install -e .` command
 
 ### 3.2 Non-Goals
 
 - Real-time / streaming processing of live data sources
 - UI or web application (CLI-first for v1)
-- Audio or video transcription
+- Audio or video transcription (handled via graceful skips in v1)
 - Password-protected ZIP or encrypted file extraction
 - Cloud storage integration (S3, GDrive) — planned for v2
 
@@ -99,18 +99,19 @@ Today's ad-hoc pipeline for this is error-prone and time-consuming:
 - Accept a single `.zip` file as the primary input argument
 - Validate the file is a well-formed ZIP before processing
 - Recursively process nested directories within the ZIP
-- Skip macOS metadata entries (`__MACOSX`, `.DS_Store`, dot-files)
+- Skip macOS metadata entries (`__MACOSX`, `.DS_Store`)
+- Skip dot-prefixed files/directories except allowed directories like `.github` if configured
 
 ### 5.2 File Type Support
 
 | Category    | Extensions                                          | Extraction Method                                                  |
 | ----------- | --------------------------------------------------- | ------------------------------------------------------------------ |
 | PDF         | `.pdf`                                              | pdfplumber text + table extraction; OCR fallback for scanned pages |
-| Images      | `.jpg` `.jpeg` `.png` `.bmp` `.tiff` `.gif` `.webp` | Tesseract OCR → extracted text                                     |
-| Excel       | `.xlsx` `.xlsm` `.xls`                              | openpyxl; every sheet → Markdown table                             |
+| Images      | `.jpg` `.jpeg` `.png` `.bmp` `.tiff` `.gif` `.webp` | Tesseract OCR → extracted text; Optional cloud Gemini fallback     |
+| Excel       | `.xlsx` `.xlsm` `.xls`                              | openpyxl for `.xlsx`/`.xlsm`; legacy `.xls` unsupported warning   |
 | CSV / TSV   | `.csv` `.tsv`                                       | Python csv module → Markdown table                                 |
-| Word        | `.docx` `.doc`                                      | python-docx paragraphs + embedded tables                           |
-| PowerPoint  | `.pptx` `.ppt`                                      | python-pptx slide-by-slide text                                    |
+| Word        | `.docx` `.doc`                                      | python-docx for `.docx`; legacy `.doc` unsupported warning         |
+| PowerPoint  | `.pptx` `.ppt`                                      | python-pptx for `.pptx`; legacy `.ppt` unsupported warning         |
 | Text / Code | `.txt` `.md` `.json` `.xml` `.html` `.py` `.js` …   | UTF-8 decode; JSON pretty-printed; HTML stripped                   |
 | Unsupported | (any other)                                         | Noted as skipped; no crash                                         |
 
@@ -126,28 +127,38 @@ Today's ad-hoc pipeline for this is error-prone and time-consuming:
   - One section per file, separated by horizontal rules
   - Each section: file path, type label, byte size, extracted content
 - Collapse 3+ consecutive blank lines to preserve readability
-- Tables serialised as GitHub-flavoured Markdown tables
+- Tables serialised as GitHub-flavoured Markdown tables (or plain spacing tables in `.txt` mode)
 
 ### 5.4 CLI Interface
 
 ```
-python zip_to_llm.py <input.zip> [-o OUTPUT_BASE] [--pdf] [--max-file-mb MAX_MB]
-                              [--no-visual-bundle] [--ocr-min-confidence CONF]
-                              [--visual-max-dim DIM] [--vision-fallback none|gemini]
-                              [--text-page-min-chars N]
+omnidoc <input.zip> [-o OUTPUT_BASE] [--pdf] [--format md|txt] [--max-file-mb MAX_MB]
+                    [--max-pdf-pages N] [--max-tokens N] [--no-progress] [--quiet]
+                    [--no-visual-bundle] [--ocr-min-confidence CONF]
+                    [--visual-max-dim DIM] [--visual-quality Q]
+                    [--vision-fallback none|gemini] [--text-page-min-chars N]
+                    [--ocr-render-dpi DPI] [-V]
 ```
 
-| Argument          | Type       | Default          | Description                                 |
-| ----------------- | ---------- | ---------------- | ------------------------------------------- |
-| `zip_file`        | positional | —                | Path to input `.zip` archive                |
-| `-o` / `--output` | optional   | `<zip_name>_llm` | Base name for output file(s) (no extension) |
-| `--pdf`           | flag       | off              | Also render and save a PDF version          |
-| `--max-file-mb`   | optional   | 100              | Per-file uncompressed size cap in MB to prevent Zip bombs |
-| `--no-visual-bundle` | flag   | off              | Disable generation of companion visual PDF |
-| `--ocr-min-confidence` | optional | 60             | Tesseract confidence threshold (0-100) below which visual content is bundled |
-| `--visual-max-dim` | optional   | 1600             | Max pixel dimension for optimized visual bundle images |
-| `--vision-fallback` | optional  | none             | Optional cloud vision fallback model when OCR fails (none or gemini) |
-| `--text-page-min-chars` | optional | 15             | Minimum characters for a PDF page to be classified as text-only |
+| Argument | Type | Default | Description |
+| --- | --- | --- | --- |
+| `zip_file` | positional | — | Path to input `.zip` archive |
+| `-o` / `--output` | optional | `<zip_name>_llm` | Base name for output file(s) (no extension) |
+| `--pdf` | flag | off | Also render and save a PDF version |
+| `--format` | choice | `md` | Output format: `md` (rich Markdown) or `txt` (token-minimal) |
+| `--max-file-mb` | optional | 100 | Per-file uncompressed size cap in MB |
+| `--max-pdf-pages` | optional | 100 | Maximum number of pages extracted per PDF |
+| `--max-tokens` | optional | None | Cap output at approximately N tokens |
+| `--no-progress` | flag | off | Disable progress bar |
+| `-q` / `--quiet` | flag | off | Suppress non-error output |
+| `--no-visual-bundle` | flag | off | Disable companion visual bundle PDF |
+| `--ocr-min-confidence` | optional | 60 | Tesseract confidence threshold (0-100) |
+| `--visual-max-dim` | optional | 1600 | Max pixel dimension for visual bundle images |
+| `--visual-quality` | optional | 75 | JPEG compression quality (10-100) |
+| `--vision-fallback` | choice | `none` | Cloud vision fallback model: `none` or `gemini` |
+| `--text-page-min-chars` | optional | 15 | Min characters for a PDF page to be text-only |
+| `--ocr-render-dpi` | optional | 200 | DPI resolution for selective PDF page rendering |
+| `-V` / `--version` | flag | off | Show program version and exit |
 
 ### 5.5 Error Handling
 
@@ -182,12 +193,13 @@ python zip_to_llm.py <input.zip> [-o OUTPUT_BASE] [--pdf] [--max-file-mb MAX_MB]
 | ZIP walker                | Iterates ZIP entries, filters metadata, calls router        |
 | Format router (`EXT_MAP`) | Maps file extension → extractor function                    |
 | Extractor: PDF            | pdfplumber text + table; pdf2image + Tesseract OCR fallback |
-| Extractor: Image          | PIL open → Tesseract OCR                                    |
+| Extractor: Image          | PIL open → Tesseract OCR; optional Gemini fallbacks         |
 | Extractor: Excel          | openpyxl → per-sheet Markdown tables                        |
 | Extractor: CSV/TSV        | csv.reader → Markdown table                                 |
 | Extractor: DOCX           | python-docx paragraphs and embedded tables                  |
 | Extractor: PPTX           | python-pptx slide text shapes                               |
 | Extractor: Text           | Decode + optional JSON/HTML normalisation                   |
+| OutputFormatter           | Switches markdown decorations on/off based on output format|
 | Markdown assembler        | Joins all sections with separators and metadata headers     |
 | PDF renderer              | ReportLab Platypus: renders Markdown as paginated PDF       |
 
@@ -196,7 +208,7 @@ python zip_to_llm.py <input.zip> [-o OUTPUT_BASE] [--pdf] [--max-file-mb MAX_MB]
 | Library       | Version | Purpose                          |
 | ------------- | ------- | -------------------------------- |
 | pdfplumber    | ≥0.9    | PDF text and table extraction    |
-| pypdf         | ≥4.0    | PDF metadata                     |
+| pypdf         | ≥4.0    | PDF metadata & Visual Bundling   |
 | pdf2image     | ≥1.16   | PDF → image (OCR fallback)       |
 | pytesseract   | ≥0.3    | OCR wrapper for Tesseract        |
 | Pillow        | ≥10.0   | Image loading and pre-processing |
@@ -204,27 +216,28 @@ python zip_to_llm.py <input.zip> [-o OUTPUT_BASE] [--pdf] [--max-file-mb MAX_MB]
 | python-docx   | ≥1.1    | Word document parsing            |
 | python-pptx   | ≥0.6    | PowerPoint parsing               |
 | reportlab     | ≥4.0    | PDF rendering                    |
+| tqdm          | ≥4.66   | CLI Progress Reporting           |
+| google-genai  | ≥0.1    | Vertex AI / Gemini fallback SDK  |
 | tesseract-ocr | 5.x     | System OCR engine (non-Python)   |
 
 ---
 
 ## 8. Milestones & Roadmap
 
-### 8.1 v1.0 — Current Release
+### 8.1 v1.0 & v1.1 — Implemented & Released
 
-- CLI tool with full file type support as specified in §5.2
-- Markdown and PDF output modes
-- Comprehensive error handling and graceful degradation
-- Full test suite with representative fixture files
-- Security hardening against Zip bombs (`--max-file-mb`) and path traversal
+- **Omnidoc CLI Engine:** Full multi-format extraction support (PDF, XLSX, DOCX, PPTX, CSV, TSV, Images, Code, HTML).
+- **Packaging & Console Script:** Modern packaging with `pyproject.toml` exposing global `omnidoc` CLI command.
+- **Progress bar:** Real-time interactive extraction progress bar using `tqdm`.
+- **Token Capping:** `--max-tokens` flag with fast token-count estimation (CHARS_PER_TOKEN=4 heuristic).
+- **PDF Extraction Capping:** `--max-pdf-pages` flag to cap large PDF document processing.
+- **Minimal Plain-Text Mode:** `--format txt` with clean spacing tables, no fences/markdown blocks.
+- **Archive Manifest & Title blocks:** In-depth recursive directory table including skipped and folder metadata.
 
-### 8.2 v1.1 — Short Term (Ergonomics & Usability Focus)
+### 8.2 v1.2 — Short Term
 
-- **PyPI / Local Packaging:** Modern `pyproject.toml` configuration for global `omnidoc` CLI command.
-- **Visual Progress Bar:** Real-time extraction progress bar with ETA and current file tracking via `tqdm` or `rich`.
-- **Token Estimation & Capping:** `--max-tokens` flag using fast heuristic (~4 chars/token) to prevent LLM context overflow.
-- **PDF Extraction Capping:** `--max-pdf-pages` flag to truncate lengthy PDF documents and conserve CPU/token limits.
-- **Minimal Plain-Text Mode:** `--format txt` flag to strip Markdown table borders and syntax for token-minimal output.
+- **Selective dotfile allowlist:** Allow extraction of dotfiles/folders under specific white-lists like `.github/`.
+- **Legacy format conversion options:** Provide options to call system conversion tools for binary format types (`.doc`, `.xls`, `.ppt`).
 
 ### 8.3 v2.0 — Medium Term
 
@@ -237,13 +250,14 @@ python zip_to_llm.py <input.zip> [-o OUTPUT_BASE] [--pdf] [--max-file-mb MAX_MB]
 
 ## 9. Open Questions
 
-| #     | Question                                                                     | Owner       | Status |
-| ----- | ---------------------------------------------------------------------------- | ----------- | ------ |
-| OQ-01 | Should Omnidoc support password-protected ZIPs with optional key input?         | Product     | Open   |
-| OQ-02 | What is the acceptable maximum output file size before chunking is required? | Engineering | Open   |
-| OQ-03 | Should nested ZIPs inside the archive be recursively expanded?               | Engineering | Open   |
-| OQ-04 | Is a `--chunk-size` flag needed to split output into LLM-sized windows?      | Product     | Open   |
-| OQ-05 | Should audio/video transcription (via Whisper) be in scope for v2?           | Product     | Closed (Yes, planned for v2, with v1.1 media skips serving as placeholders) |
+| #     | Question                                                               | Owner   | Status |
+| ----- | ---------------------------------------------------------------------- | ------- | ------ |
+| OQ-01 | Should Omnidoc support password-protected ZIPs?                         | Product | Open   |
+| OQ-02 | What is the acceptable maximum output file size?                       | Eng     | Open   |
+| OQ-03 | Should nested ZIPs inside the archive be recursively expanded?         | Eng     | Open   |
+| OQ-04 | Is a `--chunk-size` flag needed to split output into LLM-sized window? | Product | Open   |
+| OQ-05 | Should audio/video transcription (via Whisper) be in scope?           | Product | Closed (Planned for v2) |
+| OQ-06 | dotfile skipping exceptions (e.g. `.github`)                           | Product | Closed (Support `.github` selective allowlisting in v1.2) |
 
 ---
 
@@ -307,8 +321,11 @@ _[unsupported file type (.mp4) — skipped]_
 ### Installation
 
 ```bash
-# Install dependencies via Poetry
-poetry install
+# Install dependencies locally as editable package
+pip install -e .
+
+# Optional packages for OCR/PDF/AI features
+pip install -e .[all]
 
 # System OCR engine
 brew install tesseract poppler          # macOS

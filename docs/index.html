@@ -14,46 +14,82 @@
        DESIGN TOKENS (Glassmorphic Premium Dark)
      ═══════════════════════════════════════ */
     :root {
-      --bg-base:        #020408;
-      --bg-surface:     #090c13;
-      --bg-elevated:    #0f1522;
-      --bg-overlay:     rgba(15, 21, 34, 0.75);
+      /* Palette from Shutterstock theme */
+      --obsidian:       #080B12;
+      --card-bg:        #0F1320;
+      --card-bg-alt:    #111627;
+      --card-border:    #1C2233;
+      --surface-raised: #161B2E;
+      --surface-sunken: #0A0E18;
 
-      --cyan-400:       #22d3ee;
-      --cyan-500:       #06b6d4;
-      --blue-400:       #60a5fa;
-      --blue-500:       #3b82f6;
-      --indigo-500:     #6366f1;
-      --violet-500:     #8b5cf6;
-      --emerald-400:    #34d399;
-      --emerald-500:    #10b981;
-      --amber-400:      #fbbf24;
-      --rose-500:       #f43f5e;
+      --mint:           #00E8A0;
+      --mint-dim:       rgba(0, 232, 160, 0.10);
+      --mint-medium:    rgba(0, 232, 160, 0.18);
+      --mint-hover:     #00C887;
 
-      --primary:        var(--cyan-500);
-      --primary-glow:   rgba(6, 182, 212, 0.35);
-      --secondary:      var(--blue-500);
-      --accent:         var(--emerald-500);
+      --purple:         #B882FF;
+      --purple-dim:     rgba(184, 130, 255, 0.10);
+      --purple-medium:  rgba(184, 130, 255, 0.18);
+      --purple-hover:   #A060FF;
 
-      --text-100:       #f9fafb;
-      --text-200:       #e5e7eb;
-      --text-400:       #9ca3af;
-      --text-600:       #4b5563;
+      --amber:          #F59E0B;
+      --amber-dim:      rgba(245, 158, 11, 0.10);
+      --amber-medium:   rgba(245, 158, 11, 0.18);
 
-      --border-subtle:  rgba(255,255,255,0.05);
-      --border-medium:  rgba(255,255,255,0.09);
-      --border-strong:  rgba(255,255,255,0.15);
+      --coral:          #FF6B6B;
+      --coral-dim:      rgba(255, 107, 107, 0.10);
 
-      --radius-sm:      6px;
+      --pink:           #F472B6;
+      --pink-dim:       rgba(244, 114, 182, 0.10);
+
+      --blue:           #60A5FA;
+      --blue-dim:       rgba(96, 165, 250, 0.10);
+      --blue-medium:    rgba(96, 165, 250, 0.18);
+
+      --cyan:           #22D3EE;
+      --cyan-dim:       rgba(34, 211, 238, 0.10);
+
+      /* Mapping original Omnidoc tokens to new premium Shutterstock palette */
+      --bg-base:        var(--obsidian);
+      --bg-surface:     var(--card-bg);
+      --bg-elevated:    var(--surface-raised);
+      --bg-overlay:     rgba(8, 11, 18, 0.75);
+
+      --cyan-400:       var(--mint);
+      --cyan-500:       var(--mint-hover);
+      --blue-400:       var(--blue);
+      --blue-500:       var(--purple);
+      --indigo-500:     var(--purple-hover);
+      --violet-500:     var(--purple);
+      --emerald-400:    var(--mint);
+      --emerald-500:    var(--mint-hover);
+      --amber-400:      var(--amber);
+      --rose-500:       var(--coral);
+
+      --primary:        var(--mint);
+      --primary-glow:   rgba(0, 232, 160, 0.25);
+      --secondary:      var(--purple);
+      --accent:         var(--mint);
+
+      --text-100:       #E2E8F0;
+      --text-200:       #CBD5E1;
+      --text-400:       #8892A4;
+      --text-600:       #5A6478;
+
+      --border-subtle:  var(--card-border);
+      --border-medium:  rgba(28, 34, 51, 0.6);
+      --border-strong:  rgba(0, 232, 160, 0.2);
+
+      --radius-sm:      8px;
       --radius-md:      12px;
-      --radius-lg:      20px;
-      --radius-xl:      28px;
-      --radius-pill:    9999px;
+      --radius-lg:      16px;
+      --radius-xl:      20px;
+      --radius-pill:    100px;
 
-      --shadow-sm:  0 2px 8px rgba(0,0,0,0.5);
-      --shadow-md:  0 8px 32px rgba(0,0,0,0.6);
-      --shadow-lg:  0 24px 64px rgba(0,0,0,0.7);
-      --shadow-glow: 0 0 60px rgba(6,182,212,0.12);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,0.4);
+      --shadow-md:  0 4px 24px rgba(0,0,0,0.5);
+      --shadow-lg:  0 12px 48px rgba(0,0,0,0.6);
+      --shadow-glow: 0 0 60px rgba(0,232,160,0.08);
 
       --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
       --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
@@ -1119,7 +1155,7 @@
       <div class="hero-copy">
         <div class="status-pill">
           <div class="pulse-ring"></div>
-          Omnidoc v1.1.0 &mdash; Ingestion Manifests & Explicit Video Skipping Live
+          Omnidoc v1.1.0 &mdash; Modern ZIP Ingestion is Live
         </div>
 
         <h1>
@@ -1520,7 +1556,7 @@
           <span>Omni<span class="gradient-text">doc</span></span>
         </a>
         <div class="footer-tagline">Prepare your heterogeneous data for the future of LLM ingestion.</div>
-        <div class="footer-copy">&copy; 2026 Omnidoc Engine. Locally designed, premium developer tools.</div>
+        <div class="footer-copy">&copy; 2026 Omnidoc Engine. Created by Michaël Bettan. Premium developer tools.</div>
       </div>
 
       <div class="footer-links">
